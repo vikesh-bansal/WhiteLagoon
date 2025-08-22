@@ -20,11 +20,36 @@ namespace WhiteLagoon.Web.Controllers
             HomeVM homeVM = new HomeVM { VillaList = _unitOfWork.Villa.GetAll(includeProperties: "VillaAmenity"), Nights = 1, CheckInDate = DateOnly.FromDateTime(DateTime.Now) };
             return View(homeVM); 
         }
-
-        public IActionResult Privacy()
+        [HttpPost]
+        public IActionResult Index(HomeVM homeVM)
         {
-            return View();
+           homeVM.VillaList = _unitOfWork.Villa.GetAll(includeProperties: "VillaAmenity") ;
+            //homeVM.VillaList.Where(v => v.Id % 2 == 0).ToList().ForEach(v => v.IsAvailable = false); 
+            return View(homeVM);
         }
+
+        public IActionResult GetVillasByDate(int nights, DateOnly checkInDate)
+        {
+            var villaList = _unitOfWork.Villa.GetAll(includeProperties: "VillaAmenity").ToList();
+            foreach (var villa in villaList) {
+                if (villa.Id % 2 == 0)
+                {
+                    villa.IsAvailable = false;
+                }
+            }
+            HomeVM homeVM = new HomeVM
+            {
+                CheckInDate = checkInDate,
+                VillaList = villaList,
+                Nights = nights
+            };
+            return PartialView("_VillaList",homeVM);
+        }
+
+        //public IActionResult Privacy()
+        //{
+        //    return View();
+        //}
 
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()

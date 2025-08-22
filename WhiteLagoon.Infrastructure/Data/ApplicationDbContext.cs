@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,7 +9,7 @@ using WhiteLagoon.Domain.Entities;
 
 namespace WhiteLagoon.Infrastructure.Data
 {
-    public class ApplicationDbContext : DbContext
+    public class ApplicationDbContext : IdentityDbContext<ApplicationUser>
     {
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
@@ -17,9 +18,11 @@ namespace WhiteLagoon.Infrastructure.Data
         public DbSet<Villa> Villas { get; set; }
         public DbSet<VillaNumber> VillaNumbers { get; set; }
         public DbSet<Amenity> Amenities { get; set; }
+        public DbSet<ApplicationUser> ApplicationUsers { get; set; }
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            //base.OnModelCreating(modelBuilder);
+            base.OnModelCreating(modelBuilder);
+
             modelBuilder.Entity<Villa>().HasData(
                   new Villa
                   {
@@ -30,7 +33,7 @@ namespace WhiteLagoon.Infrastructure.Data
                       Occupancy = 4,
                       Price = 200,
                       Sqft = 550,
-                   },
+                  },
                     new Villa
                     {
                         Id = 2,
@@ -102,7 +105,7 @@ namespace WhiteLagoon.Infrastructure.Data
                 );
 
             modelBuilder.Entity<Amenity>().HasData(
-                new Amenity { Id=1, Name="Private Amenity 1", Description="Description 1", VillaId = 1 },
+                new Amenity { Id = 1, Name = "Private Amenity 1", Description = "Description 1", VillaId = 1 },
                 new Amenity { Id = 2, Name = "Private Amenity 2", Description = "Description 2", VillaId = 1 },
 
                 new Amenity { Id = 3, Name = "Private Amenity 3", Description = "Description 3", VillaId = 1 },
