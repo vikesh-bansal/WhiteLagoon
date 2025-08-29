@@ -5,6 +5,7 @@ using WhiteLagoon.Infrastructure.Repository;
 using Microsoft.AspNetCore.Identity;
 using WhiteLagoon.Domain.Entities;
 using Stripe;
+using System.Globalization;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -40,5 +41,12 @@ app.UseAuthorization();
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");
+
+var supportedCultures = new[] { new CultureInfo("en-ID") };
+app.UseRequestLocalization(new RequestLocalizationOptions { 
+DefaultRequestCulture=new Microsoft.AspNetCore.Localization.RequestCulture("en-US"),
+SupportedCultures=supportedCultures,
+SupportedUICultures=supportedCultures
+});
 
 app.Run();
