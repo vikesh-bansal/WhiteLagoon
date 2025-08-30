@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using WhiteLagoon.Domain.Entities;
 using Stripe;
 using System.Globalization;
+using Syncfusion.Licensing;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -21,6 +22,8 @@ builder.Services.ConfigureApplicationCookie(option => {
 builder.Services.Configure<IdentityOptions>(option => option.Password.RequiredLength = 6);
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 StripeConfiguration.ApiKey = builder.Configuration.GetSection("Stripe:SecretKey").Get<string>();
+SyncfusionLicenseProvider.RegisterLicense(builder.Configuration.GetSection("Syncfusion:Licensekey").Get<string>());
+
 
 var app = builder.Build();
 // Configure the HTTP request pipeline.

@@ -1,19 +1,25 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Stripe;
-using Stripe.Checkout; 
+using Stripe.Checkout;
+using Syncfusion.DocIO.DLS;
+using Syncfusion.DocIORenderer;
 using System.Security.Claims;
 using WhiteLagoon.Application.Common.Interfaces;
 using WhiteLagoon.Application.Common.Utility;
 using WhiteLagoon.Domain.Entities;
+
 
 namespace WhiteLagoon.Web.Controllers
 {
     public class BookingController : Controller
     {
         IUnitOfWork _unitOfWork;
-        public BookingController(IUnitOfWork unitOfWork) { 
+        private readonly IWebHostEnvironment _webHostEnvironment;
+
+        public BookingController(IUnitOfWork unitOfWork, IWebHostEnvironment webHostEnvironment) { 
         _unitOfWork = unitOfWork;
+            _webHostEnvironment = webHostEnvironment;
         }
 
         public IActionResult Index()
@@ -191,6 +197,31 @@ namespace WhiteLagoon.Web.Controllers
                 }
             }
             return availableVillaNumbers;
+        }
+
+        [HttpPost]
+        [Authorize]
+        public IActionResult GenerateInvoice(int id) {
+
+            string basePath = _webHostEnvironment.WebRootPath;
+
+            WordDocument wordDocument = new WordDocument();
+            string dataPath = basePath + @"/exports/BookingDetails.docx";
+            using FileStream fileStream = new (dataPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            wordDocument.Open(fileStream, Syncfusion.DocIO.FormatType.Automatic);
+
+            //Update Template
+            Booking bookingFromDb=_unitOfWork.Booking.Get(u=> u.Id==id, includeProperties: "User,Villa");
+
+            TextSelection textSelection = wordDocument.Find("xx_customer", false, true);
+            WTextRange textRange=textSelection.GetAsOneRange();
+            textRange.Text = bookingFromDb.Name;
+
+            using DocIORenderer render = new();
+            MemoryStream stream = new MemoryStream();
+            wordDocument.Save(stream, Syncfusion.DocIO.FormatType.Docx);
+            return File(stream, "application/docx", "BookingDetails.docx");
+
         }
     }
 }
