@@ -4,6 +4,8 @@ using Stripe;
 using Stripe.Checkout;
 using Syncfusion.DocIO.DLS;
 using Syncfusion.DocIORenderer;
+using Syncfusion.Drawing;
+using Syncfusion.Pdf;
 using System.Security.Claims;
 using WhiteLagoon.Application.Common.Interfaces;
 using WhiteLagoon.Application.Common.Utility;
@@ -201,7 +203,7 @@ namespace WhiteLagoon.Web.Controllers
 
         [HttpPost]
         [Authorize]
-        public IActionResult GenerateInvoice(int id) {
+        public IActionResult GenerateInvoice(int id, string downloadType) {
 
             string basePath = _webHostEnvironment.WebRootPath;
 
@@ -249,9 +251,67 @@ namespace WhiteLagoon.Web.Controllers
             textRange=textSelection.GetAsOneRange();
             textRange.Text = bookingFromDb.Totalcost.ToString("c");
 
+            WTable table = new(wordDocument);
+            table.TableFormat.Borders.LineWidth = 1f;
+            table.TableFormat.Borders.Color = Color.Black;
+            table.TableFormat.Paddings.Top = 7f;
+            table.TableFormat.Paddings.Bottom = 7f;
+            table.TableFormat.Borders.Horizontal.LineWidth = 1f;
+
+            table.ResetCells(2, 4);
+
+            WTableRow row0=table.Rows[0];
+            row0.Cells[0].AddParagraph().AppendText("NIGHTS");
+            row0.Cells[0].Width = 80;
+            row0.Cells[1].AddParagraph().AppendText("VILLA");
+            row0.Cells[1].Width = 220;
+            row0.Cells[2].AddParagraph().AppendText("PRICE PER NIGHT");
+            row0.Cells[2].AddParagraph().AppendText("TOTAL");
+            row0.Cells[2].Width = 80;
+
+            WTableRow row1=table.Rows[1];
+            row1.Cells[0].AddParagraph().AppendText(bookingFromDb.Nights.ToString());
+            row1.Cells[0].Width = 80;
+            row1.Cells[1].AddParagraph().AppendText(bookingFromDb.Villa.Name);
+            row1.Cells[1].Width = 220;
+            row1.Cells[2].AddParagraph().AppendText((bookingFromDb.Totalcost/bookingFromDb.Nights).ToString("c"));
+            row1.Cells[3].AddParagraph().AppendText(bookingFromDb.Totalcost.ToString("c"));
+            row1.Cells[3].Width = 80;
+            
+            WTableStyle tableStyle = wordDocument.AddTableStyle("CustomStyle") as WTableStyle;
+            tableStyle.TableProperties.RowStripe = 1;
+            tableStyle.TableProperties.ColumnStripe = 2;
+            tableStyle.TableProperties.Paddings.Top = 2;
+            tableStyle.TableProperties.Paddings.Bottom = 1;
+            tableStyle.TableProperties.Paddings.Left = 5.4f;
+            tableStyle.TableProperties.Paddings.Right = 5.4f;
+
+            ConditionalFormattingStyle firstRowStyle= tableStyle.ConditionalFormattingStyles.Add(ConditionalFormattingType.FirstRow);
+            firstRowStyle.CharacterFormat.Bold = true;
+            firstRowStyle.CharacterFormat.TextColor= Color.FromArgb(255,255, 255, 255);
+            firstRowStyle.CellProperties.BackColor = Color.Black;
+            table.ApplyStyle("CustomStyle");
+            TextBodyPart bodyPart=new(wordDocument);
+            bodyPart.BodyItems.Add(table);
+            wordDocument.Replace("<ADDTABLEHERE", bodyPart, false, false);
+           
+
+
             using DocIORenderer render = new();
             MemoryStream stream = new MemoryStream();
-            wordDocument.Save(stream, Syncfusion.DocIO.FormatType.Docx);
+            if (downloadType == "word")
+            {
+                wordDocument.Save(stream, Syncfusion.DocIO.FormatType.Docx);
+                stream.Position = 0;
+
+            }
+            else
+            {
+                PdfDocument pdfDocument = render.ConvertToPDF(wordDocument);
+                pdfDocument.Save(stream);
+                stream.Position = 0;
+                return File(stream, "application/pdf", "BookingDetails.pdf");
+            }
             stream.Position = 0;
 
             return File(stream, "application/docx", "BookingDetails.docx");
