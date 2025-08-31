@@ -217,9 +217,43 @@ namespace WhiteLagoon.Web.Controllers
             WTextRange textRange=textSelection.GetAsOneRange();
             textRange.Text = bookingFromDb.Name;
 
+            textSelection =wordDocument.Find("xx_customer_phone",false,true);
+            textRange = textSelection.GetAsOneRange();
+            textRange.Text=bookingFromDb.Name;
+
+            textSelection = wordDocument.Find("xx_cutomer_email",false, true);
+            textRange=textSelection.GetAsOneRange();
+            textRange.Text=bookingFromDb.Email;
+
+            textSelection = wordDocument.Find("XX_BOOKING_NUMBER", false, true);
+            textRange = textSelection.GetAsOneRange();
+            textRange.Text = "BOOKING ID - " + bookingFromDb.Id;
+            textRange = textSelection.GetAsOneRange();
+
+
+            textSelection = wordDocument.Find("XX_BOOKING_DATE", false, true);
+            textRange = textSelection.GetAsOneRange();
+            textRange.Text = "BOOKING DATE - " + bookingFromDb.BookingDate.ToShortDateString();
+
+            textSelection = wordDocument.Find("xx_payment_date", false, true);
+            textRange= textSelection.GetAsOneRange();
+            textRange.Text = bookingFromDb.PaymentDate.ToShortDateString();
+            textSelection = wordDocument.Find("xx_check_date", false, true);
+            textRange = textSelection.GetAsOneRange();
+            textRange.Text = bookingFromDb.CheckInDate.ToShortDateString();
+
+            textSelection = wordDocument.Find("xx_checkout_date", false, true);
+            textRange = textSelection.GetAsOneRange();
+            textRange.Text=bookingFromDb.CheckOutDate.ToShortDateString();
+            textSelection = wordDocument.Find("xx_booking_total",false,true);
+            textRange=textSelection.GetAsOneRange();
+            textRange.Text = bookingFromDb.Totalcost.ToString("c");
+
             using DocIORenderer render = new();
             MemoryStream stream = new MemoryStream();
             wordDocument.Save(stream, Syncfusion.DocIO.FormatType.Docx);
+            stream.Position = 0;
+
             return File(stream, "application/docx", "BookingDetails.docx");
 
         }
