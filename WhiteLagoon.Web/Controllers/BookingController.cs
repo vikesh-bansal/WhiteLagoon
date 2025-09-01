@@ -215,7 +215,7 @@ namespace WhiteLagoon.Web.Controllers
             //Update Template
             Booking bookingFromDb=_unitOfWork.Booking.Get(u=> u.Id==id, includeProperties: "User,Villa");
 
-            TextSelection textSelection = wordDocument.Find("xx_customer", false, true);
+            TextSelection textSelection = wordDocument.Find("xx_customer_name", false, true);
             WTextRange textRange=textSelection.GetAsOneRange();
             textRange.Text = bookingFromDb.Name;
 
@@ -223,7 +223,7 @@ namespace WhiteLagoon.Web.Controllers
             textRange = textSelection.GetAsOneRange();
             textRange.Text=bookingFromDb.Name;
 
-            textSelection = wordDocument.Find("xx_cutomer_email",false, true);
+            textSelection = wordDocument.Find("xx_customer_email",false, true);
             textRange=textSelection.GetAsOneRange();
             textRange.Text=bookingFromDb.Email;
 
@@ -240,7 +240,7 @@ namespace WhiteLagoon.Web.Controllers
             textSelection = wordDocument.Find("xx_payment_date", false, true);
             textRange= textSelection.GetAsOneRange();
             textRange.Text = bookingFromDb.PaymentDate.ToShortDateString();
-            textSelection = wordDocument.Find("xx_check_date", false, true);
+            textSelection = wordDocument.Find("xx_checkin_date", false, true);
             textRange = textSelection.GetAsOneRange();
             textRange.Text = bookingFromDb.CheckInDate.ToShortDateString();
 
@@ -258,7 +258,8 @@ namespace WhiteLagoon.Web.Controllers
             table.TableFormat.Paddings.Bottom = 7f;
             table.TableFormat.Borders.Horizontal.LineWidth = 1f;
 
-            table.ResetCells(2, 4);
+            int rows = bookingFromDb.VillaNumber > 0 ? 3 : 2;
+            table.ResetCells(rows, 4);
 
             WTableRow row0=table.Rows[0];
             row0.Cells[0].AddParagraph().AppendText("NIGHTS");
@@ -266,7 +267,7 @@ namespace WhiteLagoon.Web.Controllers
             row0.Cells[1].AddParagraph().AppendText("VILLA");
             row0.Cells[1].Width = 220;
             row0.Cells[2].AddParagraph().AppendText("PRICE PER NIGHT");
-            row0.Cells[2].AddParagraph().AppendText("TOTAL");
+            row0.Cells[3].AddParagraph().AppendText("TOTAL");
             row0.Cells[2].Width = 80;
 
             WTableRow row1=table.Rows[1];
@@ -277,7 +278,15 @@ namespace WhiteLagoon.Web.Controllers
             row1.Cells[2].AddParagraph().AppendText((bookingFromDb.Totalcost/bookingFromDb.Nights).ToString("c"));
             row1.Cells[3].AddParagraph().AppendText(bookingFromDb.Totalcost.ToString("c"));
             row1.Cells[3].Width = 80;
-            
+
+            if (bookingFromDb.VillaNumber > 0)
+            {
+                WTableRow row2= table.Rows[2];
+                row2.Cells[0].Width = 80;
+                row2.Cells[1].AddParagraph().AppendText("Villa Number - " + bookingFromDb.VillaNumber.ToString());
+                row2.Cells[1].Width = 220;
+                row2.Cells[3].Width = 80;
+            }
             WTableStyle tableStyle = wordDocument.AddTableStyle("CustomStyle") as WTableStyle;
             tableStyle.TableProperties.RowStripe = 1;
             tableStyle.TableProperties.ColumnStripe = 2;
@@ -293,7 +302,7 @@ namespace WhiteLagoon.Web.Controllers
             table.ApplyStyle("CustomStyle");
             TextBodyPart bodyPart=new(wordDocument);
             bodyPart.BodyItems.Add(table);
-            wordDocument.Replace("<ADDTABLEHERE", bodyPart, false, false);
+            wordDocument.Replace("<ADDTABLEHERE>", bodyPart, false, false);
            
 
 
