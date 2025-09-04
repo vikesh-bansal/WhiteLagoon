@@ -17,47 +17,11 @@ namespace WhiteLagoon.Infrastructure.Repository
         {
             _context = context;
         }
+
         public void Update(Booking entity)
         {
             _context.Update(entity);
         }
 
-        public void UpdateStatus(int bookingId, string bookingStatus, int villaNumber = 0)
-        {
-            var bookingDb = _context.Bookings.Where(x => x.Id == bookingId).FirstOrDefault();
-            if (bookingDb != null)
-            {
-                bookingDb.Status = bookingStatus;
-                if (bookingDb.Status == SD.StatusCheckedIn)
-                {
-                    bookingDb.VillaNumber = villaNumber;
-                    bookingDb.ActualCheckInDate = DateTime.Now;
-                }
-
-                if (bookingDb.Status == SD.StatusCompleted)
-                {
-                    bookingDb.ActualCheckOutDate = DateTime.Now;
-                }
-            }
-        }
-
-        public void UpdateStripePaymentId(int bookingId, string sessionId, string paymentIntentId)
-        {
-            var bookingFromDb = _context.Bookings.FirstOrDefault(x => x.Id == bookingId);
-            if (bookingFromDb != null)
-            {
-                if (!string.IsNullOrEmpty(sessionId))
-                {
-                    bookingFromDb.StripeSessionId= sessionId;
-                }
-
-                if (!string.IsNullOrEmpty(paymentIntentId))
-                {
-                    bookingFromDb.StripePaymentIntentId= paymentIntentId;
-                    bookingFromDb.PaymentDate=DateTime.Now;
-                    bookingFromDb.IsPaymentSuccessful= true;
-                }
-            }
-        }
     }
 }

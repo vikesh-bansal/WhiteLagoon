@@ -24,6 +24,11 @@ namespace WhiteLagoon.Infrastructure.Repository
             dbSet.Add(entity); 
         }
 
+        public bool Any(Expression<Func<T, bool>> filter)
+        {
+            return dbSet.Any(filter);
+        }
+
         public void Delete(T entity)
         {
             dbSet.Remove(entity); 

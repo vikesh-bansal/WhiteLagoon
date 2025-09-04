@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Stripe;
 using Stripe.Checkout;
@@ -9,6 +10,7 @@ using Syncfusion.Pdf;
 using System.Security.Claims;
 using WhiteLagoon.Application.Common.Interfaces;
 using WhiteLagoon.Application.Common.Utility;
+using WhiteLagoon.Application.Services.Interface;
 using WhiteLagoon.Domain.Entities;
 
 
@@ -16,12 +18,23 @@ namespace WhiteLagoon.Web.Controllers
 {
     public class BookingController : Controller
     {
-        IUnitOfWork _unitOfWork;
+        private readonly IBookingService _bookingService;
         private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly IVillaService _villaService;
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly IVillaNumberService _villaNumberService;
 
-        public BookingController(IUnitOfWork unitOfWork, IWebHostEnvironment webHostEnvironment) { 
-        _unitOfWork = unitOfWork;
+        public BookingController(IBookingService bookingService,
+                                 IWebHostEnvironment webHostEnvironment,
+                                 IVillaNumberService villaNumberService,
+                                 IVillaService villaService,
+                                 UserManager<ApplicationUser> userManager)
+        {
+            _bookingService = bookingService;
             _webHostEnvironment = webHostEnvironment;
+            _villaNumberService = villaNumberService;
+            _userManager = userManager;
+            _villaService = villaService;
         }
 
         public IActionResult Index()
@@ -32,44 +45,40 @@ namespace WhiteLagoon.Web.Controllers
         [Authorize]
         public IActionResult FinalizeBooking(int villaId, DateOnly checkIndate, int nights)
         {
-            var claimsIdentity =(ClaimsIdentity)User.Identity;
+            var claimsIdentity = (ClaimsIdentity)User.Identity;
             var userId = claimsIdentity.FindFirst(ClaimTypes.NameIdentifier).Value;
 
-            ApplicationUser user = _unitOfWork.User.Get(u => u.Id == userId);
+            ApplicationUser user = _userManager.FindByIdAsync(userId).GetAwaiter().GetResult();
 
             Booking booking = new Booking
             {
                 VillaId = villaId,
-                Villa = _unitOfWork.Villa.Get(u => u.Id == villaId, includeProperties: "VillaAmenity"),
+                Villa = _villaService.GetVillaId(villaId),
                 CheckInDate = checkIndate,
                 Nights = nights,
-                CheckOutDate= checkIndate.AddDays(nights),
-                UserId= userId,
-                Phone=user.PhoneNumber,
-                Email=user.Email,
-                Name=user.Name
+                CheckOutDate = checkIndate.AddDays(nights),
+                UserId = userId,
+                Phone = user.PhoneNumber,
+                Email = user.Email,
+                Name = user.Name
             };
             booking.Totalcost = booking.Villa.Price * nights;
             return View(booking);
         }
         [HttpPost]
         [Authorize]
-        public IActionResult FinalizeBooking(Booking booking) { 
-            var villa = _unitOfWork.Villa.Get(x=> x.Id == booking.VillaId);
-                booking.Totalcost = villa.Price * booking.Nights;
-                booking.Status = SD.StatusPending;
-                booking.BookingDate=DateTime.Now;
-            var villaNumberList = _unitOfWork.VillaNumber.GetAll().ToList();
-            var bookedVillas = _unitOfWork.Booking.GetAll(u=> u.Status == SD.StatusApproved || u.Status == SD.StatusCheckedIn).ToList();
-            int roomAvailable = SD.VillaRoomsAvailable_Count(villa.Id, villaNumberList, booking.CheckInDate, booking.Nights, bookedVillas);
-            if(roomAvailable == 0)
+        public IActionResult FinalizeBooking(Booking booking)
+        {
+            var villa = _villaService.GetVillaId(booking.VillaId);
+            booking.Totalcost = villa.Price * booking.Nights;
+            booking.Status = SD.StatusPending;
+            booking.BookingDate = DateTime.Now;
+            if (!_villaService.IsVillaAvailableByDate(villa.Id, booking.Nights, booking.CheckInDate))
             {
                 TempData["error"] = "Room has been sold out";
-                return RedirectToAction(nameof(FinalizeBooking), new {villaId = booking.VillaId, checkInDate = booking.CheckInDate, nights = booking.Nights});
+                return RedirectToAction(nameof(FinalizeBooking), new { villaId = booking.VillaId, checkInDate = booking.CheckInDate, nights = booking.Nights });
             }
-
-                _unitOfWork.Booking.Add(booking);
-                _unitOfWork.Save();
+            _bookingService.CreateBooking(booking);
             //return RedirectToAction(nameof(BookingConfirmation), new { bookingId = booking.Id });
             var domain = Request.Scheme + "://" + Request.Host.Value + "/";
             var options = new SessionCreateOptions
@@ -84,32 +93,32 @@ namespace WhiteLagoon.Web.Controllers
             {
                 PriceData = new SessionLineItemPriceDataOptions
                 {
-                    UnitAmount=(long)(booking.Totalcost*100),
-                    Currency="usd",
+                    UnitAmount = (long)(booking.Totalcost * 100),
+                    Currency = "usd",
                     ProductData = new SessionLineItemPriceDataProductDataOptions
                     {
                         Name = villa.Name
                         //Images=new List<string> { domain + villa.ImageUrl }
                     }
                 },
-                Quantity=1,
+                Quantity = 1,
             });
 
             var service = new SessionService();
-            Session session=service.Create(options);
+            Session session = service.Create(options);
 
-            _unitOfWork.Booking.UpdateStripePaymentId(booking.Id, session.Id, session.PaymentIntentId);
-            _unitOfWork.Save();
+            _bookingService.UpdateStripePaymentID(booking.Id, session.Id, session.PaymentIntentId);
             Response.Headers.Add("Location", session.Url);
             return new StatusCodeResult(303);
         }
 
         [Authorize]
-        public IActionResult BookingConfirmation(int bookingId) { 
-         
-            Booking bookingFromDb=_unitOfWork.Booking.Get(u=> u.Id==bookingId, includeProperties:"User,Villa");
+        public IActionResult BookingConfirmation(int bookingId)
+        {
 
-            if(bookingFromDb.Status == SD.StatusPending)
+            Booking bookingFromDb = _bookingService.GetBookingId(bookingId);
+
+            if (bookingFromDb.Status == SD.StatusPending)
             {
                 // this is a pending order, we need to confirm if payment was successful
 
@@ -117,9 +126,8 @@ namespace WhiteLagoon.Web.Controllers
                 Session session = service.Get(bookingFromDb.StripeSessionId);
                 if (session.PaymentStatus == "paid")
                 {
-                    _unitOfWork.Booking.UpdateStatus(bookingId, SD.StatusApproved,0);
-                    _unitOfWork.Booking.UpdateStripePaymentId(bookingId, session.Id,session.PaymentIntentId);
-                    _unitOfWork.Save();
+                    _bookingService.UpdateStatus(bookingId, SD.StatusApproved, 0);
+                    _bookingService.UpdateStripePaymentID(bookingId, session.Id, session.PaymentIntentId);
                 }
             }
             return View(bookingId);
@@ -128,70 +136,66 @@ namespace WhiteLagoon.Web.Controllers
         public IActionResult GetAll(string status)
         {
             IEnumerable<Booking> bookings;
-            if (User.IsInRole(SD.Role_Admin))
-            { 
-                bookings=_unitOfWork.Booking.GetAll(includeProperties: "User,Villa");
-            }
-            else
-            {
-                var claimsIdentity=(ClaimsIdentity)User.Identity;
-                var userId = claimsIdentity.FindFirst(ClaimTypes.NameIdentifier).Value;
+            string userId = "";
 
-                bookings = _unitOfWork.Booking.GetAll((u => u.UserId == userId), includeProperties: "User,Villa");
+            if (string.IsNullOrEmpty(status))
+            {
+                status = "";
             }
 
-            if (!string.IsNullOrEmpty(status))
+            if (!User.IsInRole(SD.Role_Admin))
             {
-                bookings=bookings.Where(x=> x.Status.ToLower().Equals(status.ToLower())).ToList();
+                var claimsIdentity = (ClaimsIdentity)User.Identity;
+                userId = claimsIdentity.FindFirst(ClaimTypes.NameIdentifier).Value;
+                
             }
+            bookings = _bookingService.GetAllBookings(userId,status);
             return Json(new { data = bookings });
         }
 
         [Authorize]
         public IActionResult BookingDetails(int bookingId)
         {
-            Booking bookingFromDb = _unitOfWork.Booking.Get(u => u.Id == bookingId, includeProperties: "User,Villa");
-            if(bookingFromDb.VillaNumber==0 && bookingFromDb.Status == SD.StatusApproved)
+            Booking bookingFromDb = _bookingService.GetBookingId(bookingId);
+            if (bookingFromDb.VillaNumber == 0 && bookingFromDb.Status == SD.StatusApproved)
             {
-                var availableVillaNumber=AssignAvailableVillaNumberByVilla(bookingFromDb.VillaId);
+                var availableVillaNumber = AssignAvailableVillaNumberByVilla(bookingFromDb.VillaId);
 
-                bookingFromDb.VillaNumbers = _unitOfWork.VillaNumber.GetAll(u => u.VillaId == bookingFromDb.VillaId && availableVillaNumber.Any(x => x == u.Villa_Number)).ToList();
+                bookingFromDb.VillaNumbers = _villaNumberService.GetAllVillaNumbers().Where(u => u.VillaId == bookingFromDb.VillaId && availableVillaNumber.Any(x => x == u.Villa_Number)).ToList();
 
             }
             return View(bookingFromDb);
         }
-        [Authorize(Roles =SD.Role_Admin)]
+        [Authorize(Roles = SD.Role_Admin)]
         public IActionResult CheckIn(Booking booking)
         {
-            _unitOfWork.Booking.UpdateStatus(booking.Id, SD.StatusCheckedIn, booking.VillaNumber);
-            _unitOfWork.Save();
+            _bookingService.UpdateStatus(booking.Id, SD.StatusCheckedIn, booking.VillaNumber);            
             TempData["Success"] = "Booking Updated Successfully.";
-            return RedirectToAction(nameof(BookingDetails),new {bookingId=booking.Id});
+            return RedirectToAction(nameof(BookingDetails), new { bookingId = booking.Id });
         }
-        [Authorize(Roles =SD.Role_Admin)]
+        [Authorize(Roles = SD.Role_Admin)]
         public IActionResult CheckOut(Booking booking)
         {
-            _unitOfWork.Booking.UpdateStatus(booking.Id, SD.StatusCompleted, booking.VillaNumber);
-            _unitOfWork.Save();
+            _bookingService.UpdateStatus(booking.Id, SD.StatusCompleted, booking.VillaNumber);            
             TempData["Success"] = "Booking Completed Successfully";
-            return RedirectToAction(nameof(BookingDetails),new {bookingId= booking.Id});
+            return RedirectToAction(nameof(BookingDetails), new { bookingId = booking.Id });
         }
-        [Authorize(Roles =SD.Role_Admin)]
+        [Authorize(Roles = SD.Role_Admin)]
         public IActionResult CancelBooking(Booking booking)
         {
-            _unitOfWork.Booking.UpdateStatus(booking.Id, SD.StatusCancelled, 0);
-            _unitOfWork.Save();
+            _bookingService.UpdateStatus(booking.Id, SD.StatusCancelled, 0); 
+
             TempData["Success"] = "Booking Cancelled Successfully";
-            return RedirectToAction(nameof(BookingDetails),new { bookingId=booking.Id});
+            return RedirectToAction(nameof(BookingDetails), new { bookingId = booking.Id });
         }
-        private List<int> AssignAvailableVillaNumberByVilla(int villaId) {
-
+        private List<int> AssignAvailableVillaNumberByVilla(int villaId)
+        {
             List<int> availableVillaNumbers = new List<int>();
-            var villaNumbers=_unitOfWork.VillaNumber.GetAll(u=> u.VillaId==villaId);
+            var villaNumbers = _villaNumberService.GetAllVillaNumbers().Where(u => u.VillaId == villaId);
 
-            var checkedInVilla=_unitOfWork.Booking.GetAll(u=> u.VillaId == villaId && u.Status ==SD.StatusCheckedIn).Select(u=> u.VillaNumber).ToList();
+            var checkedInVilla = _bookingService.GetAllBookings().Where(u => u.VillaId == villaId && u.Status == SD.StatusCheckedIn).Select(u => u.VillaNumber).ToList();
 
-            foreach(var villaNum in villaNumbers)
+            foreach (var villaNum in villaNumbers)
             {
                 if (!checkedInVilla.Contains(villaNum.Villa_Number))
                 {
@@ -203,29 +207,30 @@ namespace WhiteLagoon.Web.Controllers
 
         [HttpPost]
         [Authorize]
-        public IActionResult GenerateInvoice(int id, string downloadType) {
+        public IActionResult GenerateInvoice(int id, string downloadType)
+        {
 
             string basePath = _webHostEnvironment.WebRootPath;
 
             WordDocument wordDocument = new WordDocument();
             string dataPath = basePath + @"/exports/BookingDetails.docx";
-            using FileStream fileStream = new (dataPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using FileStream fileStream = new(dataPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             wordDocument.Open(fileStream, Syncfusion.DocIO.FormatType.Automatic);
 
             //Update Template
-            Booking bookingFromDb=_unitOfWork.Booking.Get(u=> u.Id==id, includeProperties: "User,Villa");
+            Booking bookingFromDb = _bookingService.GetBookingId(id);
 
             TextSelection textSelection = wordDocument.Find("xx_customer_name", false, true);
-            WTextRange textRange=textSelection.GetAsOneRange();
+            WTextRange textRange = textSelection.GetAsOneRange();
             textRange.Text = bookingFromDb.Name;
 
-            textSelection =wordDocument.Find("xx_customer_phone",false,true);
+            textSelection = wordDocument.Find("xx_customer_phone", false, true);
             textRange = textSelection.GetAsOneRange();
-            textRange.Text=bookingFromDb.Name;
+            textRange.Text = bookingFromDb.Name;
 
-            textSelection = wordDocument.Find("xx_customer_email",false, true);
-            textRange=textSelection.GetAsOneRange();
-            textRange.Text=bookingFromDb.Email;
+            textSelection = wordDocument.Find("xx_customer_email", false, true);
+            textRange = textSelection.GetAsOneRange();
+            textRange.Text = bookingFromDb.Email;
 
             textSelection = wordDocument.Find("XX_BOOKING_NUMBER", false, true);
             textRange = textSelection.GetAsOneRange();
@@ -238,7 +243,7 @@ namespace WhiteLagoon.Web.Controllers
             textRange.Text = "BOOKING DATE - " + bookingFromDb.BookingDate.ToShortDateString();
 
             textSelection = wordDocument.Find("xx_payment_date", false, true);
-            textRange= textSelection.GetAsOneRange();
+            textRange = textSelection.GetAsOneRange();
             textRange.Text = bookingFromDb.PaymentDate.ToShortDateString();
             textSelection = wordDocument.Find("xx_checkin_date", false, true);
             textRange = textSelection.GetAsOneRange();
@@ -246,9 +251,9 @@ namespace WhiteLagoon.Web.Controllers
 
             textSelection = wordDocument.Find("xx_checkout_date", false, true);
             textRange = textSelection.GetAsOneRange();
-            textRange.Text=bookingFromDb.CheckOutDate.ToShortDateString();
-            textSelection = wordDocument.Find("xx_booking_total",false,true);
-            textRange=textSelection.GetAsOneRange();
+            textRange.Text = bookingFromDb.CheckOutDate.ToShortDateString();
+            textSelection = wordDocument.Find("xx_booking_total", false, true);
+            textRange = textSelection.GetAsOneRange();
             textRange.Text = bookingFromDb.Totalcost.ToString("c");
 
             WTable table = new(wordDocument);
@@ -261,7 +266,7 @@ namespace WhiteLagoon.Web.Controllers
             int rows = bookingFromDb.VillaNumber > 0 ? 3 : 2;
             table.ResetCells(rows, 4);
 
-            WTableRow row0=table.Rows[0];
+            WTableRow row0 = table.Rows[0];
             row0.Cells[0].AddParagraph().AppendText("NIGHTS");
             row0.Cells[0].Width = 80;
             row0.Cells[1].AddParagraph().AppendText("VILLA");
@@ -270,18 +275,18 @@ namespace WhiteLagoon.Web.Controllers
             row0.Cells[3].AddParagraph().AppendText("TOTAL");
             row0.Cells[2].Width = 80;
 
-            WTableRow row1=table.Rows[1];
+            WTableRow row1 = table.Rows[1];
             row1.Cells[0].AddParagraph().AppendText(bookingFromDb.Nights.ToString());
             row1.Cells[0].Width = 80;
             row1.Cells[1].AddParagraph().AppendText(bookingFromDb.Villa.Name);
             row1.Cells[1].Width = 220;
-            row1.Cells[2].AddParagraph().AppendText((bookingFromDb.Totalcost/bookingFromDb.Nights).ToString("c"));
+            row1.Cells[2].AddParagraph().AppendText((bookingFromDb.Totalcost / bookingFromDb.Nights).ToString("c"));
             row1.Cells[3].AddParagraph().AppendText(bookingFromDb.Totalcost.ToString("c"));
             row1.Cells[3].Width = 80;
 
             if (bookingFromDb.VillaNumber > 0)
             {
-                WTableRow row2= table.Rows[2];
+                WTableRow row2 = table.Rows[2];
                 row2.Cells[0].Width = 80;
                 row2.Cells[1].AddParagraph().AppendText("Villa Number - " + bookingFromDb.VillaNumber.ToString());
                 row2.Cells[1].Width = 220;
@@ -295,15 +300,15 @@ namespace WhiteLagoon.Web.Controllers
             tableStyle.TableProperties.Paddings.Left = 5.4f;
             tableStyle.TableProperties.Paddings.Right = 5.4f;
 
-            ConditionalFormattingStyle firstRowStyle= tableStyle.ConditionalFormattingStyles.Add(ConditionalFormattingType.FirstRow);
+            ConditionalFormattingStyle firstRowStyle = tableStyle.ConditionalFormattingStyles.Add(ConditionalFormattingType.FirstRow);
             firstRowStyle.CharacterFormat.Bold = true;
-            firstRowStyle.CharacterFormat.TextColor= Color.FromArgb(255,255, 255, 255);
+            firstRowStyle.CharacterFormat.TextColor = Color.FromArgb(255, 255, 255, 255);
             firstRowStyle.CellProperties.BackColor = Color.Black;
             table.ApplyStyle("CustomStyle");
-            TextBodyPart bodyPart=new(wordDocument);
+            TextBodyPart bodyPart = new(wordDocument);
             bodyPart.BodyItems.Add(table);
             wordDocument.Replace("<ADDTABLEHERE>", bodyPart, false, false);
-           
+
 
 
             using DocIORenderer render = new();
