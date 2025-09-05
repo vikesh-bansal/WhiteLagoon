@@ -49,7 +49,7 @@ namespace WhiteLagoon.Infrastructure.Repository
             if (!string.IsNullOrEmpty(includeProperties))
             {
                 foreach(var includeProp in includeProperties.Split(',', StringSplitOptions.RemoveEmptyEntries)){
-                    query=query.Include(includeProp);
+                    query=query.Include(includeProp.Trim());
                 }
             }
             return query.FirstOrDefault();
@@ -74,7 +74,7 @@ namespace WhiteLagoon.Infrastructure.Repository
             if (!string.IsNullOrEmpty(includeProperties))
             {
                 foreach (var includeProp in includeProperties.Split(',', StringSplitOptions.RemoveEmptyEntries)){
-                    query = query.Include(includeProp);
+                    query = query.Include(includeProp.Trim());
                 }
             }
             return query.ToList();

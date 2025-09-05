@@ -23,20 +23,22 @@ namespace WhiteLagoon.Web.Controllers
         private readonly IVillaService _villaService;
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly IVillaNumberService _villaNumberService;
-
+        private readonly IPaymentService _paymentService;
         public BookingController(IBookingService bookingService,
                                  IWebHostEnvironment webHostEnvironment,
                                  IVillaNumberService villaNumberService,
                                  IVillaService villaService,
-                                 UserManager<ApplicationUser> userManager)
+                                 UserManager<ApplicationUser> userManager,
+                                 IPaymentService paymentService)
         {
             _bookingService = bookingService;
             _webHostEnvironment = webHostEnvironment;
             _villaNumberService = villaNumberService;
             _userManager = userManager;
             _villaService = villaService;
+            _paymentService = paymentService;
         }
-
+        [Authorize]
         public IActionResult Index()
         {
             return View();
@@ -81,32 +83,9 @@ namespace WhiteLagoon.Web.Controllers
             _bookingService.CreateBooking(booking);
             //return RedirectToAction(nameof(BookingConfirmation), new { bookingId = booking.Id });
             var domain = Request.Scheme + "://" + Request.Host.Value + "/";
-            var options = new SessionCreateOptions
-            {
-                LineItems = new List<SessionLineItemOptions>(),
-                Mode = "payment",
-                SuccessUrl = domain + $"booking/BookingConfirmation?bookingId={booking.Id}",
-                CancelUrl = domain + $"booking/FinalBooking?villaId={booking.VillaId}&checkInDate={booking.CheckInDate}&nights={booking.Nights}"
-            };
-
-            options.LineItems.Add(new SessionLineItemOptions
-            {
-                PriceData = new SessionLineItemPriceDataOptions
-                {
-                    UnitAmount = (long)(booking.Totalcost * 100),
-                    Currency = "usd",
-                    ProductData = new SessionLineItemPriceDataProductDataOptions
-                    {
-                        Name = villa.Name
-                        //Images=new List<string> { domain + villa.ImageUrl }
-                    }
-                },
-                Quantity = 1,
-            });
-
-            var service = new SessionService();
-            Session session = service.Create(options);
-
+            
+            var options = _paymentService.CreateStripeSessionOptions(booking, villa, domain); 
+            Session session = _paymentService.CreateStripeSession(options);
             _bookingService.UpdateStripePaymentID(booking.Id, session.Id, session.PaymentIntentId);
             Response.Headers.Add("Location", session.Url);
             return new StatusCodeResult(303);
@@ -132,7 +111,7 @@ namespace WhiteLagoon.Web.Controllers
             }
             return View(bookingId);
         }
-
+        [Authorize]
         public IActionResult GetAll(string status)
         {
             IEnumerable<Booking> bookings;
@@ -193,7 +172,7 @@ namespace WhiteLagoon.Web.Controllers
             List<int> availableVillaNumbers = new List<int>();
             var villaNumbers = _villaNumberService.GetAllVillaNumbers().Where(u => u.VillaId == villaId);
 
-            var checkedInVilla = _bookingService.GetAllBookings().Where(u => u.VillaId == villaId && u.Status == SD.StatusCheckedIn).Select(u => u.VillaNumber).ToList();
+            var checkedInVilla = _bookingService.GetCheckedInVillaNumbers(villaId);
 
             foreach (var villaNum in villaNumbers)
             {

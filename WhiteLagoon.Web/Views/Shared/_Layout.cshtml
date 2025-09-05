@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="~/WhiteLagoon.Web.styles.css" asp-append-version="true" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.css" integrity="sha512-oe8OpYjBaDWPt2VmSFR+qYOdnTjeV9QPLJUeqZyprDEQvQLJ9C5PCFclxwNuvb/GQgQngdCXzKSFltuHD3eCxA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="//cdn.datatables.net/1.13.6/css/jquery.dataTables.min.css" />
-  
+
 </head>
 <body>
     <header>
@@ -27,33 +27,16 @@
                         <li class="nav-item">
                             <a class="nav-link text-white" asp-area="" asp-controller="Home" asp-action="Index">Home</a>
                         </li>
-                   @*      <li class="nav-item">
-                            <a class="nav-link text-white" asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
-                        </li> *@
-                        @if (User.IsInRole(SD.Role_Admin))
-                        {
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                Content Management
-                            </a>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" asp-controller="Villa" asp-action="Index">Villa</a></li>
-                                <li><a class="dropdown-item" asp-controller="VillaNumber" asp-action="Index">Villa Number</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" asp-area="" asp-controller="Amenity" asp-action="Index">Amenity</a></li>
-                                <li><a class="dropdown-item" asp-area="" asp-controller="Booking" asp-action="Index">Booking</a></li>
-                                <li><a class="dropdown-item" asp-area="" asp-controller="Booking" asp-action="Index" asp-route-status="@SD.StatusApproved" >Approved</a></li>
-                            </ul>
-                        </li> 
-                        }
-                        else
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link" asp-controller="Booking" asp-action="Index">Manage Bookings</a>
-                            </li>
-                        }
-                       
+                      <li class="nav-item">
+                          <a class="nav-link" asp-controller="Booking" asp-action="Index">Manage Bookings</a>
+                      </li>
                     </ul>
+                    <div class="p-2 border rounded">
+                        <div class="form-check form-switch" id="btnSwitch">
+                            <input class="form-check-input" type="checkbox" role="switch" id="flexSwitchCheckDefault" />
+                            <label class="form-check-label" for="flexSwitchCheckDefault">Mode</label>
+                        </div>
+                    </div>
                     <partial name="_LoginPartial" />
                 </div>
             </div>
@@ -61,25 +44,32 @@
     </header>
     <div class="">
         <main role="main" class="">
-
             <div class="loading spinner" style="display:none;" id="aJSpinner"></div>
             @RenderBody()
         </main>
     </div>
 
     <footer class="border-top footer text-muted">
-        <div class="container">
+        <div class="container text-center">
             &copy; 2025 - WhiteLagoon.Web - <a asp-area="" asp-controller="Home" asp-action="Privacy">Privacy</a>
         </div>
     </footer>
- 
+    <script type="text/javascript">
+        document.getElementById('btnSwitch').addEventListener('click', ()=>{
+        if(document.documentElement.getAttribute('data-bs-theme')=='dark'){
+            document.documentElement.setAttribute('data-bs-theme','light');
+        }else{
+            document.documentElement.setAttribute('data-bs-theme','dark');
+        }
+        });
+    </script>
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.1/js/bootstrap.bundle.min.js" integrity="sha512-ToL6UYWePxjhDQKNioSi4AyJ5KkRxY+F1+Fi7Jgh0Hp5Kk2/s8FD7zusJDdonfe5B00Qw+B8taXxF6CFLnqNCw==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/2.1.4/toastr.min.js" integrity="sha512-lbwH47l/tPXJYG9AcFNoJaTMhGvYWhVM9YI43CT+uteTRRaiLCui8snIgyAN8XWgNjNhCqlAUdzZptso6OCoFQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <partial name="_Notification" />
     <script src="~/lib/jquery-ajax-unobtrusive/jquery.unobtrusive-ajax.min.js"></script>
-    <script src="//cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js" asp-append-version="true"></script> 
+    <script src="//cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js" asp-append-version="true"></script>
 
     @await RenderSectionAsync("Scripts", required: false)
 </body>
